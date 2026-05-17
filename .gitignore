@@ -1,0 +1,23 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+env/
+
+# Data and models
+data/
+checkpoints/
+*.pt
+*.pth
+*.ckpt
+
+# Results/logs
+results/
+*.log
+*.out
+
+# OS / editor
+.DS_Store
+.vscode/
+.idea/
