@@ -12,7 +12,7 @@
 #SBATCH --verbose
 #SBATCH --exclude=login   # don't try to run anything on login node!!
 #SBATCH --output=meinJob_%j.out
-#SBATCH --mail-user=<volle email>@tu-braunschweig.de
+#SBATCH --mail-user=m.labidi@tu-braunschweig.de
 #SBATCH --mail-type=INVALID_DEPEND,BEGIN,END,FAIL,TIME_LIMIT_50,TIME_LIMIT
 #----------
 #-- --mail-type: any useful combination of those: 
