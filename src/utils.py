@@ -221,6 +221,8 @@ def get_logger(log_file: str, name: str = "da") -> logging.Logger:
 
 if __name__ == "__main__":
     import tempfile
+    import time
+    import gc
 
     # set_seed
     set_seed(42)
@@ -236,8 +238,8 @@ if __name__ == "__main__":
         meter.update(v, n=1)
     assert abs(meter.avg - 2.0) < 1e-6, f"AverageMeter avg wrong: {meter.avg}"
     meter2 = AverageMeter()
-    meter2.update(10.0, n=2)   # represents 2 samples with value 10
-    meter2.update(20.0, n=2)   # represents 2 samples with value 20
+    meter2.update(10.0, n=2)
+    meter2.update(20.0, n=2)
     assert abs(meter2.avg - 15.0) < 1e-6
     print("AverageMeter     ✓")
 
@@ -257,15 +259,36 @@ if __name__ == "__main__":
             assert torch.allclose(p1, p2)
     print("save/load ckpt   ✓")
 
-    # logger
-    with tempfile.TemporaryDirectory() as tmpdir:
-        log_path = os.path.join(tmpdir, "test.log")
-        logger   = get_logger(log_path, name="test_logger")
+    # Logger test - Windows-safe version
+    print("get_logger       ", end="", flush=True)
+    log_path = "test_logger_temp.log"  # Use current directory instead of temp
+    try:
+        logger = get_logger(log_path, name="test_logger")
         logger.info("Logger smoke-test line.")
+        
+        # Close all handlers to release file
+        for handler in logger.handlers:
+            handler.flush()
+            handler.close()
+        logger.handlers.clear()
+        
+        # Verify
         assert os.path.isfile(log_path)
         with open(log_path) as f:
             content = f.read()
         assert "Logger smoke-test line." in content
-    print("get_logger       ✓")
+        
+        # Clean up
+        os.remove(log_path)
+        print("✓")
+    except Exception as e:
+        print(f"FAILED: {e}")
+        # Clean up on failure
+        if os.path.exists(log_path):
+            try:
+                os.remove(log_path)
+            except:
+                pass
+        raise
 
     print("\nAll smoke-tests passed.")

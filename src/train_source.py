@@ -20,7 +20,8 @@ python src/train_source.py \
     --batch_size 64 \
     --lr 1e-3 \
     --seed 42 \
-    --output_dir ./outputs/source
+    --results_dir ./results/source \
+    --checkpoints_dir ./checkpoints/source
 """
 
 import argparse
@@ -52,8 +53,8 @@ def get_args():
                    help="Prob. digit gets its canonical color in source domain")
     p.add_argument("--target_color_prob", type=float, default=0.10,
                    help="Prob. digit gets its canonical color in target domain")
-    p.add_argument("--binary_labels",     action="store_true",
-                   help="Use 2-class labels (digit < 5 vs >= 5) instead of 10-class")
+    p.add_argument("--binary_labels",     action="store_true", default=True,
+                   help="Use 2-class labels (digit < 5 vs >= 5) instead of 10-class (default: True per project spec)")
 
     # Model
     p.add_argument("--backbone",  type=str, default="cnn",
@@ -70,8 +71,11 @@ def get_args():
     p.add_argument("--seed",       type=int,   default=42)
     p.add_argument("--num_workers",type=int,   default=2)
 
-    # Output
-    p.add_argument("--output_dir", type=str, default="./outputs/source")
+    # Output — matches README project structure
+    p.add_argument("--results_dir",     type=str, default="./results/source",
+                   help="Where to write logs, metrics CSV, and results summary")
+    p.add_argument("--checkpoints_dir", type=str, default="./checkpoints/source",
+                   help="Where to save model checkpoints")
 
     return p.parse_args()
 
@@ -112,8 +116,9 @@ def main():
     args = get_args()
     set_seed(args.seed)
 
-    os.makedirs(args.output_dir, exist_ok=True)
-    logger = get_logger(os.path.join(args.output_dir, "train_source.log"))
+    os.makedirs(args.results_dir,     exist_ok=True)
+    os.makedirs(args.checkpoints_dir, exist_ok=True)
+    logger = get_logger(os.path.join(args.results_dir, "train_source.log"))
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     logger.info(f"Device: {device}")
@@ -147,7 +152,7 @@ def main():
     criterion = nn.CrossEntropyLoss()
 
     # ---- CSV log -----------------------------------------------------------
-    csv_path = os.path.join(args.output_dir, "metrics.csv")
+    csv_path = os.path.join(args.results_dir, "metrics.csv")
     csv_file = open(csv_path, "w", newline="")
     writer   = csv.DictWriter(csv_file, fieldnames=[
         "epoch", "train_loss", "train_acc",
@@ -158,7 +163,7 @@ def main():
 
     # ---- Training loop -----------------------------------------------------
     best_val_acc   = 0.0
-    best_ckpt_path = os.path.join(args.output_dir, "best_model.pt")
+    best_ckpt_path = os.path.join(args.checkpoints_dir, "best_model.pt")
     t0 = time.time()
 
     for epoch in range(1, args.epochs + 1):
@@ -215,7 +220,7 @@ def main():
     logger.info(f"Seed: {args.seed}")
 
     # Save final results summary
-    summary_path = os.path.join(args.output_dir, "results_summary.txt")
+    summary_path = os.path.join(args.results_dir, "results_summary.txt")
     with open(summary_path, "w") as f:
         f.write(f"backbone:            {args.backbone}\n")
         f.write(f"seed:                {args.seed}\n")
@@ -231,9 +236,9 @@ def main():
         f.write(f"domain_gap:          {src_acc - tgt_acc:.4f}\n")
         f.write(f"per_class_tgt_acc:   {[round(a,3) for a in tgt_per_class]}\n")
 
-    logger.info(f"\nResults saved to {summary_path}")
-    logger.info(f"Best checkpoint    : {best_ckpt_path}")
-    logger.info(f"Metrics CSV        : {csv_path}")
+    logger.info(f"\nResults saved to   {summary_path}")
+    logger.info(f"Best checkpoint    {best_ckpt_path}")
+    logger.info(f"Metrics CSV        {csv_path}")
 
 
 if __name__ == "__main__":
