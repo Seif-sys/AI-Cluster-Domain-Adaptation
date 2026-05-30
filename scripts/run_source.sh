@@ -12,115 +12,78 @@
 #SBATCH --verbose
 #SBATCH --exclude=login
 #SBATCH --output=source_%j.out
-#SBATCH --mail-user=<yourEmailId>@tu-braunschweig.de
+#SBATCH --mail-user=s.saad@tu-braunschweig.de
 #SBATCH --mail-type=INVALID_DEPEND,BEGIN,END,FAIL,TIME_LIMIT_50,TIME_LIMIT
 
 # =============================================================================
-# run_source.sh
-# Train the source-only CNN baseline on Colored-MNIST (binary classification).
-#
-# This is the first script to run. It produces:
-#   ${WORK}/checkpoints/source/best_model.pt  <- required by run_coral.sh
-#                                                and run_upper_bound.sh
-#   ${WORK}/results/source/results_summary.txt
-#   ${WORK}/results/source/metrics.csv
-#
-# Usage (interactive, no SLURM):
-#   bash scripts/run_source.sh
-#
-# Usage (cluster):
-#   sbatch scripts/run_source.sh
+# Use local scratch space instead of home directory
 # =============================================================================
 
-# ---- Paths ------------------------------------------------------------------
-BASE=/home/AppTainerImages
-export BASE
+# Use SLURM temporary directory (local SSD on compute node)
+export WORK=$SLURM_TMPDIR
+export PROJECT_DIR=/home/y0108835/GITZ-home/AppData/AI-Cluster-Domain-Adaptation
 
-WORK=/home/`whoami`/AppT
-export WORK
+echo "Using WORK directory: $WORK"
+echo "Project directory: $PROJECT_DIR"
 
-VENV=${WORK}/myVenv
-export VENV
+# Create working directories in local scratch
+mkdir -p $WORK/results/source
+mkdir -p $WORK/checkpoints/source
+mkdir -p $WORK/data
+mkdir -p $WORK/myVenv
 
-PROJECT=${WORK}/domain-adaptation          # root of your git repo
-export PROJECT
+# Check if Apptainer is available
+module load apptainer 2>/dev/null || echo "Apptainer module not found"
 
-RESULTS_DIR=${WORK}/results/source
-CHECKPOINTS_DIR=${WORK}/checkpoints/source
-
-# ---- Create working directory if missing ------------------------------------
-[ ! -d $WORK ]            && mkdir -p $WORK
-[ ! -d $RESULTS_DIR ]     && mkdir -p $RESULTS_DIR
-[ ! -d $CHECKPOINTS_DIR ] && mkdir -p $CHECKPOINTS_DIR
-
-# ---- Create writable overlay if missing -------------------------------------
-if [ ! -f ${WORK}/ubuntu_overlay12.img ]; then
-    echo "Creating writable overlay..."
-    cd $WORK
-    apptainer overlay create --size 1024 --create-dir ${WORK} ${WORK}/ubuntu_overlay12.img
-    echo "Overlay created."
+# Check for container
+CONTAINER=/home/AppTainerImages/ubuntu-cuda12.sif
+if [ ! -f $CONTAINER ]; then
+    echo "Container not found. Please check path."
+    ls -la /home/AppTainerImages/ 2>/dev/null || echo "Directory not accessible"
+    exit 1
 fi
 
-# ---- Install requirements if not already done --------------------------------
-if [ ! -f $VENV/checked.log ]; then
-    echo "Installing requirements into venv..."
-    cp $BASE/check.py $BASE/checktorch.py $WORK
-    apptainer shell --nv --overlay ${WORK}/ubuntu_overlay12.img ${BASE}/ubuntu-cuda12.sif <<ENDE
-      python3 -m venv $VENV
-      source ${VENV}/bin/activate
-      pip install torch==2.6.0 torchvision==0.21.0 torchaudio==2.6.0 --index-url https://download.pytorch.org/whl/cu126
-      pip install numpy scikit-learn matplotlib tqdm
-      cd $VENV
-      mv $WORK/check.py $WORK/checktorch.py .
-      python3 check.py | tee checked.log
-      python3 checktorch.py | tee -a checked.log
-      rm check.py checktorch.py
-ENDE
-    echo "Requirements installed. See $VENV/checked.log"
-fi
+# Copy necessary files to local scratch
+cp -r $PROJECT_DIR/src $WORK/
+cp -r $PROJECT_DIR/scripts $WORK/
+cp $PROJECT_DIR/*.py $WORK/ 2>/dev/null
 
-# ---- Run source-only training -----------------------------------------------
-echo "Starting source-only baseline training..."
-echo "  Results dir     : $RESULTS_DIR"
-echo "  Checkpoints dir : $CHECKPOINTS_DIR"
-echo "  Job ID          : $SLURM_JOB_ID"
+# Create fresh overlay image in local scratch (writable!)
+cd $WORK
+apptainer overlay create --size 2048 ubuntu_overlay.img
 
-apptainer exec --nv \
-    --overlay ${WORK}/ubuntu_overlay12.img \
-    ${BASE}/ubuntu-cuda12.sif \
+# Install requirements in container
+apptainer exec --nv --overlay $WORK/ubuntu_overlay.img $CONTAINER << 'EOF'
+    python3 -m venv $SLURM_TMPDIR/myVenv
+    source $SLURM_TMPDIR/myVenv/bin/activate
+    pip install --upgrade pip
+    pip install torch==2.0.1 torchvision==0.15.2 --index-url https://download.pytorch.org/whl/cu118
+    pip install numpy scikit-learn matplotlib tqdm
+EOF
+
+# Run training
+apptainer exec --nv --overlay $WORK/ubuntu_overlay.img $CONTAINER \
     bash -c "
-        source ${VENV}/bin/activate
-        cd ${PROJECT}
+        source $WORK/myVenv/bin/activate
+        cd $WORK
         python src/train_source.py \
-            --backbone          cnn \
-            --epochs            20 \
-            --batch_size        64 \
-            --lr                1e-3 \
-            --feat_dim          256 \
-            --dropout           0.3 \
+            --backbone cnn \
+            --epochs 20 \
+            --batch_size 64 \
+            --lr 1e-3 \
+            --feat_dim 256 \
+            --dropout 0.3 \
             --source_color_prob 0.99 \
             --target_color_prob 0.10 \
-            --seed              42 \
-            --num_workers       4 \
-            --data_root         ${WORK}/data \
-            --results_dir       ${RESULTS_DIR} \
-            --checkpoints_dir   ${CHECKPOINTS_DIR}
+            --seed 42 \
+            --num_workers 4 \
+            --data_root $WORK/data \
+            --results_dir $WORK/results/source \
+            --checkpoints_dir $WORK/checkpoints/source
     "
 
-EXIT_CODE=$?
+# Copy results back to home directory after training
+cp -r $WORK/results/source /home/y0108835/GITZ-home/AppData/AI-Cluster-Domain-Adaptation/results/
+cp -r $WORK/checkpoints/source /home/y0108835/GITZ-home/AppData/AI-Cluster-Domain-Adaptation/checkpoints/
 
-if [ $EXIT_CODE -eq 0 ]; then
-    echo ""
-    echo "Source training finished successfully."
-    echo "Results    : ${RESULTS_DIR}/results_summary.txt"
-    echo "Metrics    : ${RESULTS_DIR}/metrics.csv"
-    echo "Checkpoint : ${CHECKPOINTS_DIR}/best_model.pt"
-    echo ""
-    echo "Next step  : sbatch scripts/run_coral.sh"
-    echo "             sbatch scripts/run_upper_bound.sh"
-else
-    echo "ERROR: train_source.py exited with code $EXIT_CODE"
-    exit $EXIT_CODE
-fi
-
-echo "Job $SLURM_JOB_ID completed."
+echo "Training completed. Results copied back to home directory."
