@@ -11,7 +11,7 @@
 #SBATCH --gres=shard:1    # einen Teil einer irgendeiner GPU
 #SBATCH --verbose
 #SBATCH --exclude=login   # don't try to run anything on login node!!
-#SBATCH --output=meinJob_%j.out
+#SBATCH --output=prepare_venv_%j.out
 #SBATCH --mail-user=m.labidi@tu-braunschweig.de
 #SBATCH --mail-type=INVALID_DEPEND,BEGIN,END,FAIL,TIME_LIMIT_50,TIME_LIMIT
 #----------
@@ -41,7 +41,7 @@ export VENV
 [ ! -d $WORK ] && mkdir -p $WORK
 
 # create writable overlay in working directory
-if [ ! -f ${WORK}/ubuntu_overlay.img ]; then
+if [ ! -f ${WORK}/ubuntu_overlay12.img ]; then
     echo "build writable overlay with personally needed python modules"
     cd $WORK
     apptainer overlay create --size 1024 --create-dir ${WORK} ${WORK}/ubuntu_overlay12.img
@@ -56,19 +56,33 @@ if [ ! -f $VENV/checked.log ]; then
     # get my demo python here
     cp $BASE/check.py $BASE/checktorch.py $WORK    ## (!) VENV might not exist yet 
     apptainer shell --nv --overlay ${WORK}/ubuntu_overlay12.img ${BASE}/ubuntu-cuda12.sif <<ENDE
-      python3 -m venv $VENV
-      source ${VENV}/bin/activate
-      pip install cupy
-      pip install numba
-      pip install numpy
-      pip install torch==2.6.0 torchvision==0.21.0 torchaudio==2.6.0 --index-url https://download.pytorch.org/whl/cu126
-      cd $VENV
-      mv $WORK/check.py $WORK/checktorch.py .
-      python3 check.py | tee checked.log          # if tests fail completely checked.log might be empty; so if its empty     
-      python3 checktorch.py | tee -a checked.log  # remove it manually to get here again. remove it if requirements changed.
-      rm check.py checktorch.py
+    python3 -m venv $VENV
+    source ${VENV}/bin/activate
+    pip install cupy
+    pip install numba
+    pip install numpy
+    pip install matplotlib scikit-learn tqdm pandas
+    pip install torch==2.6.0 torchvision==0.21.0 torchaudio==2.6.0 --index-url https://download.pytorch.org/whl/cu126
+    cd $VENV
+    mv $WORK/check.py $WORK/checktorch.py .
+    python3 check.py | tee checked.log          # if tests fail completely checked.log might be empty; so if its empty     
+    python3 checktorch.py | tee -a checked.log  # remove it manually to get here again. remove it if requirements changed.
+            python3 - <<PY | tee -a checked.log
+    import torch
+    import torchvision
+    import numpy as np
+
+    print("Torch:", torch.__version__)
+    print("Torchvision:", torchvision.__version__)
+    print("NumPy:", np.__version__)
+    print("CUDA available:", torch.cuda.is_available())
+
+    if torch.cuda.is_available():
+        print("GPU:", torch.cuda.get_device_name(0))
+    PY
+    rm check.py checktorch.py
 ENDE
-      echo "installed requirements and did checks; see $VENV/checked.log"
+    echo "installed requirements and did checks; see $VENV/checked.log"
 
 fi
 

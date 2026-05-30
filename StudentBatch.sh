@@ -11,7 +11,7 @@
 #SBATCH --gres=shard:1    # einen Teil einer irgendeiner GPU
 #SBATCH --verbose
 #SBATCH --exclude=login   # don't try to run anything on login node!!
-#SBATCH --output=meinJob_%j.out
+#SBATCH --output=training_%j.out
 #SBATCH --mail-user=m.labidi@tu-braunschweig.de
 #SBATCH --mail-type=INVALID_DEPEND,BEGIN,END,FAIL,TIME_LIMIT_50,TIME_LIMIT
 #----------
@@ -25,19 +25,41 @@
 #----------
 
 echo "Hello from $(hostname) at $(date)"
+TRAIN_SCRIPT=${1:-src/train_source.py}
 
 export WORK=$HOME/AppT
 export BASE=/home/AppTainerImages
+export REPO=/home/y0113643/AI-Cluster-Domain-Adaptation
 
 echo "start application"
-[ ! -f ${WORK}/ubuntu_overlay.img ] && { echo "*** please create overlay first. ***; exit 1; }
+[ ! -f ${WORK}/ubuntu_overlay12.img ] && { echo "*** please create overlay first. Run PrepareVenv.sh. ***"; exit 1; }
 
 # (!) if you want to use (parts) of a gpu don't forget the --nv flag!
+
 apptainer shell --nv --overlay ${WORK}/ubuntu_overlay12.img ${BASE}/ubuntu-cuda12.sif <<ENDE
-  echo "Using $(nvidia-smi -L)"
-  cd AppT/myVenv
-  source bin/activate    cd app
-  python torchtest.py
+  source ${WORK}/myVenv/bin/activate
+
+  cd ${REPO}
+
+  echo "Current directory:"
+  pwd
+
+  echo "Using GPU:"
+  nvidia-smi -L
+
+  echo "Python:"
+  which python
+
+  echo "PyTorch CUDA check:"
+  python - <<PY
+import torch
+print("CUDA available:", torch.cuda.is_available())
+if torch.cuda.is_available():
+    print("GPU:", torch.cuda.get_device_name(0))
+PY
+
+  echo "Running script: ${TRAIN_SCRIPT}"
+  python ${TRAIN_SCRIPT}
 ENDE
 
 echo "application done "
