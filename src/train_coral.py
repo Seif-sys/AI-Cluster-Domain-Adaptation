@@ -51,7 +51,7 @@ import torch.nn as nn
 from torch.optim import Adam
 from torch.optim.lr_scheduler import CosineAnnealingLR
 
-from data_colored_mnist import get_colored_mnist_loaders
+from data_factory import get_loaders
 from evaluate import evaluate, print_evaluation_report, check_negative_transfer
 from models import get_model
 from utils import set_seed, save_checkpoint, load_checkpoint, AverageMeter, get_logger
@@ -219,14 +219,17 @@ def main():
     num_classes = 2 if args.binary_labels else 10
 
     # ---- Data --------------------------------------------------------------
-    src_train, src_test, tgt_train, tgt_test, val_loader = get_colored_mnist_loaders(
-        root=args.data_root,
+    src_train, src_test, tgt_train, tgt_test, val_loader = get_loaders(
+        dataset=args.dataset,
+        data_root=args.data_root,
         batch_size=args.batch_size,
-        source_color_prob=args.source_color_prob,
-        target_color_prob=args.target_color_prob,
+        source_color_prob=getattr(args, "source_color_prob", 0.99),
+        target_color_prob=getattr(args, "target_color_prob", 0.10),
+        source_angle=getattr(args, "source_angle", 0),
+        target_angle=getattr(args, "target_angle", 45),
         seed=args.seed,
         num_workers=args.num_workers,
-        binary_labels=args.binary_labels,
+        binary_labels=getattr(args, "binary_labels", False),
     )
 
     # ---- Model: start from source checkpoint -------------------------------

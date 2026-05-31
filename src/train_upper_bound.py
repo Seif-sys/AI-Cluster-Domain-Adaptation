@@ -40,7 +40,7 @@ from torch.optim import Adam
 from torch.optim.lr_scheduler import CosineAnnealingLR
 from torch.utils.data import random_split
 
-from data_colored_mnist import get_colored_mnist_loaders
+from data_factory import get_loaders
 from evaluate import evaluate
 from models import get_model
 from utils import set_seed, save_checkpoint, load_checkpoint, AverageMeter, get_logger
@@ -80,6 +80,11 @@ def get_args():
     p.add_argument("--dropout",     type=float, default=0.3)
     p.add_argument("--seed",        type=int,   default=42)
     p.add_argument("--num_workers", type=int,   default=2)
+
+    #Dataset
+    p.add_argument("--dataset", type=str, default="colored_mnist",
+               choices=["colored_mnist", "rotated_mnist", "mnist_c"],
+               help="Which source/target dataset pair to use")
 
     # Output
     p.add_argument("--output_dir",  type=str,   default="./outputs/upper_bound")
@@ -134,15 +139,19 @@ def main():
     num_classes = 2 if args.binary_labels else 10
 
     # ---- Data --------------------------------------------------------------
-    _, src_test, tgt_train_full, tgt_test, _ = get_colored_mnist_loaders(
-        root=args.data_root,
+    _, src_test, tgt_train_full, tgt_test, _ = get_loaders(
+        dataset=args.dataset,
+        data_root=args.data_root,
         batch_size=args.batch_size,
-        source_color_prob=args.source_color_prob,
-        target_color_prob=args.target_color_prob,
+        source_color_prob=getattr(args, "source_color_prob", 0.99),
+        target_color_prob=getattr(args, "target_color_prob", 0.10),
+        source_angle=getattr(args, "source_angle", 0),
+        target_angle=getattr(args, "target_angle", 45),
         seed=args.seed,
         num_workers=args.num_workers,
-        binary_labels=args.binary_labels,
+        binary_labels=getattr(args, "binary_labels", False),
     )
+        
 
     # Split target train into fine-tune train + val
     # (val used only for checkpoint selection — not for tuning method choices)
