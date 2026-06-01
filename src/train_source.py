@@ -1,4 +1,17 @@
-import json
+"""
+train_source.py
+===============
+
+Train the source-only CNN baseline.
+
+This model trains only on labeled source data.
+Target data is not used for training.
+Target test labels are used only for final evaluation.
+"""
+
+from __future__ import annotations
+
+import argparse
 import time
 from pathlib import Path
 
@@ -7,14 +20,31 @@ from torch import nn
 from torch.optim import Adam
 
 from data_colored_mnist import get_colored_mnist_loaders
-from models import SmallCNN
-from utils import get_device, set_seed
+from evaluate import evaluate, print_report, save_confusion_matrix_plot
+from models import get_model
+from utils import AverageMeter, get_device, save_checkpoint, save_json, set_seed
+
+
+def get_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Train source-only CNN baseline")
+
+    parser.add_argument("--epochs", type=int, default=5)
+    parser.add_argument("--batch_size", type=int, default=64)
+    parser.add_argument("--lr", type=float, default=0.001)
+    parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument("--source_correlation", type=float, default=0.99)
+    parser.add_argument("--target_correlation", type=float, default=0.10)
+    parser.add_argument("--val_fraction", type=float, default=0.10)
+    parser.add_argument("--max_train_samples", type=int, default=None)
+    parser.add_argument("--output_dir", type=str, default="results/source_only")
+    parser.add_argument("--checkpoint_path", type=str, default="checkpoints/source_only_best.pt")
+
+    return parser.parse_args()
 
 
 def train_one_epoch(model, dataloader, criterion, optimizer, device):
     model.train()
-
-    total_loss = 0.0
+    loss_meter = AverageMeter()
     correct = 0
     total = 0
 
@@ -23,160 +53,111 @@ def train_one_epoch(model, dataloader, criterion, optimizer, device):
         labels = labels.to(device)
 
         optimizer.zero_grad()
-
         logits = model(images)
         loss = criterion(logits, labels)
-
         loss.backward()
         optimizer.step()
 
-        total_loss += loss.item() * labels.size(0)
-
+        loss_meter.update(loss.item(), labels.size(0))
         predictions = torch.argmax(logits, dim=1)
         correct += (predictions == labels).sum().item()
         total += labels.size(0)
 
-    average_loss = total_loss / total
-    accuracy = correct / total
-
-    return average_loss, accuracy
+    return loss_meter.average, correct / total
 
 
-def evaluate(model, dataloader, criterion, device):
-    model.eval()
+def main() -> None:
+    args = get_args()
+    set_seed(args.seed)
 
-    total_loss = 0.0
-    correct = 0
-    total = 0
-
-    with torch.no_grad():
-        for images, labels in dataloader:
-            images = images.to(device)
-            labels = labels.to(device)
-
-            logits = model(images)
-            loss = criterion(logits, labels)
-
-            total_loss += loss.item() * labels.size(0)
-
-            predictions = torch.argmax(logits, dim=1)
-            correct += (predictions == labels).sum().item()
-            total += labels.size(0)
-
-    average_loss = total_loss / total
-    accuracy = correct / total
-
-    return average_loss, accuracy
-
-
-def main():
-    seed = 42
-    batch_size = 64
-    learning_rate = 0.001
-    epochs = 5
-
-    source_correlation = 0.99
-    target_correlation = 0.50
-
-    set_seed(seed)
     device = get_device()
-
     print("Device:", device)
 
     loaders = get_colored_mnist_loaders(
-        batch_size=batch_size,
-        source_correlation=source_correlation,
-        target_correlation=target_correlation,
-        seed=seed,
+        batch_size=args.batch_size,
+        source_correlation=args.source_correlation,
+        target_correlation=args.target_correlation,
+        seed=args.seed,
+        val_fraction=args.val_fraction,
+        max_train_samples=args.max_train_samples,
     )
 
-    model = SmallCNN(num_classes=2).to(device)
-
+    model = get_model(num_classes=2).to(device)
     criterion = nn.CrossEntropyLoss()
-    optimizer = Adam(model.parameters(), lr=learning_rate)
+    optimizer = Adam(model.parameters(), lr=args.lr)
 
+    best_val_acc = -1.0
+    history = []
     start_time = time.time()
 
-    history = []
-
-    for epoch in range(1, epochs + 1):
+    for epoch in range(1, args.epochs + 1):
         train_loss, train_acc = train_one_epoch(
-            model,
-            loaders["source_train"],
-            criterion,
-            optimizer,
-            device,
+            model, loaders["source_train"], criterion, optimizer, device
         )
 
-        source_test_loss, source_test_acc = evaluate(
-            model,
-            loaders["source_test"],
-            criterion,
-            device,
-        )
+        val_result = evaluate(model, loaders["source_val"], criterion, device, num_classes=2)
+        val_acc = val_result["accuracy"]
 
-        target_test_loss, target_test_acc = evaluate(
-            model,
-            loaders["target_test"],
-            criterion,
-            device,
-        )
+        if val_acc > best_val_acc:
+            best_val_acc = val_acc
+            save_checkpoint(
+                model=model,
+                optimizer=optimizer,
+                path=args.checkpoint_path,
+                epoch=epoch,
+                val_acc=val_acc,
+                extra=vars(args),
+            )
 
         epoch_result = {
             "epoch": epoch,
             "train_loss": train_loss,
             "train_acc": train_acc,
-            "source_test_loss": source_test_loss,
-            "source_test_acc": source_test_acc,
-            "target_test_loss": target_test_loss,
-            "target_test_acc": target_test_acc,
+            "source_val_acc": val_acc,
         }
-
         history.append(epoch_result)
 
         print(
-            f"Epoch {epoch}/{epochs} | "
+            f"Epoch {epoch}/{args.epochs} | "
             f"train acc: {train_acc:.4f} | "
-            f"source test acc: {source_test_acc:.4f} | "
-            f"target test acc: {target_test_acc:.4f}"
+            f"source val acc: {val_acc:.4f}"
         )
 
     training_time = time.time() - start_time
 
-    Path("checkpoints").mkdir(exist_ok=True)
-    Path("results").mkdir(exist_ok=True)
+    # Load best checkpoint before final evaluation.
+    checkpoint = torch.load(args.checkpoint_path, map_location=device)
+    model.load_state_dict(checkpoint["model_state_dict"])
 
-    torch.save(
-        {
-            "model_state_dict": model.state_dict(),
-            "seed": seed,
-            "batch_size": batch_size,
-            "learning_rate": learning_rate,
-            "epochs": epochs,
-            "source_correlation": source_correlation,
-            "target_correlation": target_correlation,
-        },
-        "checkpoints/source_only_cnn.pt",
+    source_test = evaluate(model, loaders["source_test"], criterion, device, num_classes=2)
+    target_test = evaluate(model, loaders["target_test"], criterion, device, num_classes=2)
+
+    print_report("Source test", source_test)
+    print_report("Target test", target_test)
+
+    output_dir = Path(args.output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    save_confusion_matrix_plot(
+        target_test["confusion_matrix"],
+        output_dir / "target_confusion_matrix.png",
+        class_names=["0-4", "5-9"],
     )
 
-    results = {
-        "method": "source_only_cnn",
-        "seed": seed,
-        "batch_size": batch_size,
-        "learning_rate": learning_rate,
-        "epochs": epochs,
-        "source_correlation": source_correlation,
-        "target_correlation": target_correlation,
-        "training_time_seconds": training_time,
-        "history": history,
-    }
+    save_json(
+        {
+            "method": "source_only_cnn",
+            "args": vars(args),
+            "best_val_acc": best_val_acc,
+            "training_time_seconds": training_time,
+            "history": history,
+            "source_test": source_test,
+            "target_test": target_test,
+        },
+        output_dir / "results.json",
+    )
 
-    with open("results/source_only_results.json", "w", encoding="utf-8") as file:
-        json.dump(results, file, indent=2)
-
-    print("Saved checkpoint to checkpoints/source_only_cnn.pt")
-    print("Saved results to results/source_only_results.json")
-    print("Source-only training done.")
+    print("Saved source-only results to", output_dir)
 
 
 if __name__ == "__main__":
