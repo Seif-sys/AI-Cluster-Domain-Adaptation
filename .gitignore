@@ -21,3 +21,5 @@ results/
 .DS_Store
 .vscode/
 .idea/
+
+results_cloud/
