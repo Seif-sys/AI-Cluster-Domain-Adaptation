@@ -202,7 +202,6 @@ Training results are saved under:
 
 ```text
 results/
-results_cloud/
 ```
 
 Checkpoints are saved under:
@@ -214,13 +213,13 @@ checkpoints/
 Final presentation files are collected under:
 
 ```text
-results_cloud/final/
+results/final/
 ```
 
 Final presentation plots are saved under:
 
 ```text
-results_cloud/final/plots/
+results/final/plots/
 ```
 
 Important generated files include:
@@ -245,7 +244,7 @@ Usually ignored:
 data/
 checkpoints/
 results/
-results_cloud/
+results/
 *.pt
 *.pth
 *.log

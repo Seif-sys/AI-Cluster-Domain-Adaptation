@@ -37,49 +37,59 @@ def copy_if_exists(source: Path, target: Path) -> None:
 
 def prepare_final_results_folder() -> None:
     """
-    Collect the most important results into results_cloud/final.
+    Collect the most important results into results/final.
     """
-    final_dir = ROOT / "results_cloud" / "final"
+    final_dir = ROOT / "results" / "final"
     final_dir.mkdir(parents=True, exist_ok=True)
 
     copy_if_exists(
-        ROOT / "results_cloud" / "source_only" / "results.json",
+        ROOT / "results" / "source_only" / "results.json",
         final_dir / "source_only_results.json",
     )
 
     copy_if_exists(
-        ROOT / "results_cloud" / "coral" / "results.json",
+        ROOT / "results" / "coral" / "results.json",
         final_dir / "deep_coral_results.json",
     )
 
     copy_if_exists(
-        ROOT / "results_cloud" / "upper_bound" / "results.json",
+        ROOT / "results" / "upper_bound" / "results.json",
         final_dir / "upper_bound_results.json",
     )
 
     copy_if_exists(
-        ROOT / "results_cloud" / "source_only" / "target_confusion_matrix.png",
+        ROOT / "results" / "source_only" / "target_confusion_matrix.png",
         final_dir / "confusion_source_only.png",
     )
 
     copy_if_exists(
-        ROOT / "results_cloud" / "coral" / "target_confusion_matrix.png",
+        ROOT / "results" / "coral" / "target_confusion_matrix.png",
         final_dir / "confusion_deep_coral.png",
     )
 
     copy_if_exists(
-        ROOT / "results_cloud" / "upper_bound" / "target_confusion_matrix.png",
+        ROOT / "results" / "upper_bound" / "target_confusion_matrix.png",
         final_dir / "confusion_upper_bound.png",
     )
 
     copy_if_exists(
-        ROOT / "results_cloud" / "sweep" / "lambda_target_correlation_sweep.csv",
+        ROOT / "results" / "sweep" / "lambda_target_correlation_sweep.csv",
         final_dir / "sweep_results.csv",
     )
 
     copy_if_exists(
-        ROOT / "results_cloud" / "sweep" / "heatmap_delta.png",
+        ROOT / "results" / "sweep" / "heatmap_delta.png",
         final_dir / "heatmap_delta.png",
+    )
+    
+    copy_if_exists(
+        ROOT / "results" / "pseudo_label" / "results.json",
+        final_dir / "pseudo_label_results.json",
+    )
+    
+    copy_if_exists(
+        ROOT / "results" / "feature_dim_sweep" / "feature_dim_summary.csv",
+        final_dir / "feature_dim_summary.csv",
     )
 
 
@@ -105,6 +115,7 @@ def expand_steps(steps: list[str]) -> list[str]:
                 "coral",
                 "upper",
                 "sweep",
+                "feature_sweep",
                 "heatmap",
                 "final",
                 "plots",
@@ -137,6 +148,7 @@ def main() -> None:
             "coral",
             "upper",
             "sweep",
+            "feature_sweep",
             "heatmap",
             "final",
             "plots",
@@ -152,6 +164,17 @@ def main() -> None:
 
     parser.add_argument("--epochs", type=int, default=5)
     parser.add_argument("--sweep_epochs", type=int, default=3)
+    
+    parser.add_argument("--feature_dim", type=int, default=128)
+
+    parser.add_argument(
+        "--feature_dims",
+        nargs="+",
+        type=int,
+        default=[64, 128, 256, 512],
+    )
+
+    parser.add_argument("--feature_sweep_epochs", type=int, default=10)
 
     parser.add_argument("--target_correlation", type=float, default=0.10)
     parser.add_argument("--lambda_coral", type=float, default=10.0)
@@ -198,6 +221,8 @@ def main() -> None:
                 str(args.epochs),
                 "--target_correlation",
                 str(args.target_correlation),
+                "--feature_dim",
+                str(args.feature_dim),
             ])
 
         elif step == "coral":
@@ -210,6 +235,8 @@ def main() -> None:
                 str(args.target_correlation),
                 "--lambda_coral",
                 str(args.lambda_coral),
+                "--feature_dim",
+                str(args.feature_dim),
             ])
 
         elif step == "upper":
@@ -220,6 +247,8 @@ def main() -> None:
                 str(args.epochs),
                 "--target_correlation",
                 str(args.target_correlation),
+                "--feature_dim",
+                str(args.feature_dim),
             ])
 
         elif step == "sweep":
@@ -275,7 +304,23 @@ def main() -> None:
                 str(args.target_correlation),
                 "--confidence_threshold",
                 str(args.confidence_threshold),
+                "--feature_dim",
+                str(args.feature_dim),
             ])
+        
+        elif step == "feature_sweep":
+            run_command([
+                PYTHON,
+                "src/sweep_feature_dims.py",
+                "--epochs",
+                str(args.feature_sweep_epochs),
+                "--feature_dims",
+                *[str(x) for x in args.feature_dims],
+                "--target_correlation",
+                str(args.target_correlation),
+                "--lambda_coral",
+                str(args.lambda_coral),
+        ])
 
     print("\nDone.")
 

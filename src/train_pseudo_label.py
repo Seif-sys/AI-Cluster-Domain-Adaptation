@@ -10,7 +10,7 @@ from torch.utils.data import DataLoader, TensorDataset
 
 from data_colored_mnist import get_colored_mnist_loaders
 from evaluate import evaluate
-from models import SmallCNN
+from models import get_model
 from utils import get_device, set_seed
 
 
@@ -152,7 +152,7 @@ def main():
 
     parser.add_argument("--epochs", type=int, default=5)
     parser.add_argument("--batch_size", type=int, default=64)
-    parser.add_argument("--learning_rate", type=float, default=0.001)
+    parser.add_argument("--lr", type=float, default=0.001)
 
     parser.add_argument("--source_correlation", type=float, default=0.99)
     parser.add_argument("--target_correlation", type=float, default=0.10)
@@ -161,7 +161,12 @@ def main():
     parser.add_argument("--pseudo_weight", type=float, default=1.0)
 
     parser.add_argument("--seed", type=int, default=42)
-    parser.add_argument("--output_dir", type=str, default="results_cloud/pseudo_label")
+    parser.add_argument("--output_dir", type=str, default="results/pseudo_label")
+
+    parser.add_argument("--feature_dim", type=int, default=128)
+    parser.add_argument("--dropout", type=float, default=0.2)
+    parser.add_argument("--max_train_samples", type=int, default=None)
+    parser.add_argument("--checkpoint_path", type=str, default="checkpoints/pseudo_label_best.pt")
 
     args = parser.parse_args()
 
@@ -175,9 +180,14 @@ def main():
         source_correlation=args.source_correlation,
         target_correlation=args.target_correlation,
         seed=args.seed,
+        max_train_samples=args.max_train_samples,
     )
 
-    model = SmallCNN(num_classes=2).to(device)
+    model = get_model(
+        num_classes=2,
+        feature_dim=args.feature_dim,
+        dropout=args.dropout,
+    ).to(device)
     load_model_weights(model, args.source_checkpoint, device)
 
     pseudo_dataset = create_pseudo_label_dataset(
@@ -195,7 +205,7 @@ def main():
     )
 
     criterion = nn.CrossEntropyLoss()
-    optimizer = Adam(model.parameters(), lr=args.learning_rate)
+    optimizer = Adam(model.parameters(), lr=args.lr)
 
     start_time = time.time()
 
@@ -213,17 +223,19 @@ def main():
         )
 
         source_result = evaluate(
-            model=model,
-            dataloader=loaders["source_test"],
-            device=device,
-            class_names=["0-4", "5-9"],
+            model,
+            loaders["source_test"],
+            criterion,
+            device,
+            num_classes=2,
         )
 
         target_result = evaluate(
-            model=model,
-            dataloader=loaders["target_test"],
-            device=device,
-            class_names=["0-4", "5-9"],
+            model,
+            loaders["target_test"],
+            criterion,
+            device,
+            num_classes=2,
         )
 
         print(
@@ -247,7 +259,9 @@ def main():
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    checkpoint_path = output_dir / "pseudo_label_model.pt"
+    checkpoint_path = Path(args.checkpoint_path)
+    checkpoint_path.parent.mkdir(parents=True, exist_ok=True)
+
     torch.save(
         {
             "model_state_dict": model.state_dict(),

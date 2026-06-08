@@ -44,6 +44,8 @@ def get_args() -> argparse.Namespace:
     parser.add_argument("--max_train_samples", type=int, default=None)
     parser.add_argument("--output_dir", type=str, default="results/coral")
     parser.add_argument("--checkpoint_path", type=str, default="checkpoints/coral_best.pt")
+    parser.add_argument("--feature_dim", type=int, default=128)
+    parser.add_argument("--dropout", type=float, default=0.2)
 
     return parser.parse_args()
 
@@ -132,7 +134,11 @@ def main() -> None:
         max_train_samples=args.max_train_samples,
     )
 
-    model = get_model(num_classes=2).to(device)
+    model = get_model(
+        num_classes=2,
+        feature_dim=args.feature_dim,
+        dropout=args.dropout,
+    ).to(device)
     criterion = nn.CrossEntropyLoss()
     optimizer = Adam(model.parameters(), lr=args.lr)
 
