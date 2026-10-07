@@ -1,0 +1,23 @@
+=== Deep CORAL — Unsupervised Domain Adaptation ===
+Target labels were NOT used during adaptation.
+
+backbone:            cnn
+source_ckpt:         ./checkpoints/source_rot/best_model.pt
+lambda_coral:        25.0
+seed:                42
+source_color_prob:   0.99
+target_color_prob:   0.1
+epochs:              20
+lr:                  0.001
+batch_size:          64
+training_time_min:   39.0
+device:              cpu
+
+--- Results ---
+source_acc_before:   0.9944
+target_acc_before:   0.6552  (source-only baseline)
+source_acc_after:    0.9944
+target_acc_after:    0.7031  (CORAL adapted)
+delta_target:        +0.0479
+negative_transfer:   False
+per_class_tgt_acc:   [0.987, 0.826, 0.562, 0.799, 0.454, 0.712, 0.69, 0.491, 0.745, 0.76]

@@ -4,11 +4,12 @@ from torch.utils.data import Dataset, DataLoader, random_split
 from torchvision import datasets, transforms
 
 
+
 def get_rotated_mnist_loaders(
     root="./data",
     batch_size=64,
     source_angle=0,
-    target_angle=45,
+    target_angle=15,
     val_fraction=0.1,
     seed=42,
     num_workers=2,

@@ -80,6 +80,8 @@ def get_args():
     p.add_argument("--dropout",     type=float, default=0.3)
     p.add_argument("--seed",        type=int,   default=42)
     p.add_argument("--num_workers", type=int,   default=2)
+    p.add_argument("--source_angle", type=int, default=0)
+    p.add_argument("--target_angle", type=int, default=45)
 
     #Dataset
     p.add_argument("--dataset", type=str, default="colored_mnist",

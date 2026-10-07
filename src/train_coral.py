@@ -119,12 +119,17 @@ def get_args():
     p.add_argument("--lambda_coral", type=float, default=1.0,
                    help="Weight of the CORAL loss term. Tune on val, not test.")
 
+    p.add_argument("--dataset", type=str, default="colored_mnist",
+               choices=["colored_mnist", "rotated_mnist", "mnist_c"],
+               help="Which source/target dataset pair to use")
     # Training
     p.add_argument("--epochs",      type=int,   default=20)
     p.add_argument("--batch_size",  type=int,   default=64)
     p.add_argument("--lr",          type=float, default=1e-3)
     p.add_argument("--seed",        type=int,   default=42)
     p.add_argument("--num_workers", type=int,   default=2)
+    p.add_argument("--source_angle", type=int, default=0)
+    p.add_argument("--target_angle", type=int, default=45)
 
     # Output
     p.add_argument("--output_dir",  type=str,   default="./outputs/coral")

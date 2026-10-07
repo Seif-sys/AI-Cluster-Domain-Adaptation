@@ -53,8 +53,8 @@ def get_args():
                    help="Prob. digit gets its canonical color in source domain")
     p.add_argument("--target_color_prob", type=float, default=0.10,
                    help="Prob. digit gets its canonical color in target domain")
-    p.add_argument("--binary_labels",     action="store_true", default=True,
-                   help="Use 2-class labels (digit < 5 vs >= 5) instead of 10-class (default: True per project spec)")
+    p.add_argument("--binary_labels",     action="store_true", default=False,
+                   help="Use 2-class labels (digit < 5 vs >= 5) instead of 10-class (default: False per project spec)")
 
     # Model
     p.add_argument("--backbone",  type=str, default="cnn",
@@ -63,6 +63,9 @@ def get_args():
     p.add_argument("--pretrained", action="store_true",
                    help="Use ImageNet pretrained weights (ResNet only)")
 
+    p.add_argument("--dataset", type=str, default="colored_mnist",
+               choices=["colored_mnist", "rotated_mnist", "mnist_c"],
+               help="Which source/target dataset pair to use")
     # Training
     p.add_argument("--epochs",     type=int,   default=20)
     p.add_argument("--batch_size", type=int,   default=64)
@@ -70,6 +73,7 @@ def get_args():
     p.add_argument("--dropout",    type=float, default=0.3)
     p.add_argument("--seed",       type=int,   default=42)
     p.add_argument("--num_workers",type=int,   default=2)
+    
 
     # Output — matches README project structure
     p.add_argument("--results_dir",     type=str, default="./results/source",
@@ -227,8 +231,8 @@ def main():
     with open(summary_path, "w") as f:
         f.write(f"backbone:            {args.backbone}\n")
         f.write(f"seed:                {args.seed}\n")
-        f.write(f"source_color_prob:   {args.source_color_prob}\n")
-        f.write(f"target_color_prob:   {args.target_color_prob}\n")
+        f.write(f"source_color_prob:   {getattr(args, 'source_color_prob', 'N/A')}\n")
+        f.write(f"target_color_prob:   {getattr(args, 'target_color_prob', 'N/A')}\n")
         f.write(f"epochs:              {args.epochs}\n")
         f.write(f"lr:                  {args.lr}\n")
         f.write(f"batch_size:          {args.batch_size}\n")
